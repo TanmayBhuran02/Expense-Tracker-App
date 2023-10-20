@@ -11,41 +11,39 @@ class DatabaseHelper(context: Context):
     companion object{
         private const val DATABASE_NAME = "UserDatabase.db"
         private const val DATABASE_VERSION = 1
-        private const val TABLE_NAME = "data"
-        private const val COLUMN_ID = "id"
-        private const val COLUMN_USERNAME = "username"
-        private const val COLUMN_PASSWORD = "password"
     }
 
     override fun onCreate(db: SQLiteDatabase?) {
-        val createTableQuery =  ("CREATE TABLE $TABLE_NAME ("
-                + "$COLUMN_ID INTEGER PRIMARY KEY AUTOINCREMENT, "
-                + "$COLUMN_USERNAME TEXT"
-                + "$COLUMN_PASSWORD TEXT")
+        val createTableQuery =  ("CREATE TABLE data (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT , password TEXT)")
         db?.execSQL(createTableQuery)
     }
 
     override fun onUpgrade(db: SQLiteDatabase?, oldVersion: Int, newVersion: Int) {
-        val dropTableQuery = ("DROP TABLE IF EXIST $TABLE_NAME")
+        val dropTableQuery = ("DROP TABLE IF EXIST data")
         db?.execSQL(dropTableQuery)
     }
 
-    fun insertUser(username: String, password: String): Long{
+    fun insertUser(username: String, password: String): Boolean {
         val values = ContentValues().apply{
-            put(COLUMN_USERNAME, username)
-            put(COLUMN_PASSWORD, password)
+            put("username", username)
+            put("password", password)
     }
         val db = writableDatabase
-        return db.insert(TABLE_NAME, null, values)
+        val result = db.insert("data", null, values)
+        if (result == (-1).toLong()){
+            return  false
+        }
+        return true
     }
 
-    fun readUser(username: String, password: String):Boolean{
-        val db = readableDatabase
-        val selection = "$COLUMN_USERNAME = ? AND $COLUMN_PASSWORD = ?"
-        val selectionArgs = arrayOf(username, password)
-        val cursor = db.query(TABLE_NAME, null, selection, selectionArgs, null, null,null )
-        val userExists = cursor.count > 0
-        cursor.close()
-        return userExists
+    fun checkuser(username: String, password: String):Boolean{
+        val db = this.writableDatabase
+        val query = ("select * from data where username = $username and password = $password")
+        val cursor = db.rawQuery(query, null)
+        if (cursor.count<= 0){
+            cursor.close()
+            return false
+        }
+        return true
     }
 }

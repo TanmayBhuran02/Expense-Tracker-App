@@ -3,44 +3,56 @@ package com.example.expensetracker
 import android.content.Intent
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.text.TextUtils
+import android.widget.Button
+import android.widget.EditText
 import android.widget.Toast
-import com.example.expensetracker.databinding.ActivitySignUpBinding
 
 class SignUpActivity : AppCompatActivity() {
 
-    private lateinit var binding: ActivitySignUpBinding
-    private lateinit var databaseHelper: DatabaseHelper
-
+    private lateinit var uname : EditText
+    private lateinit var pword : EditText
+    private lateinit var cpword : EditText
+    private lateinit var sbutton : Button
+    private lateinit var db : DatabaseHelper
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivitySignUpBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        setContentView(R.layout.activity_sign_up)
 
-        databaseHelper = DatabaseHelper(this)
+        uname = findViewById(R.id.signUpUsername)
+        pword = findViewById(R.id.signUpPassword)
+        cpword = findViewById(R.id.signUpConfirmPassword)
+        sbutton = findViewById(R.id.signup_button)
+        db = DatabaseHelper(this)
 
-        binding.signupButton.setOnClickListener {
-            val signUpUsername = binding.signUpUsername.text.toString()
-            val signUpPassword = binding.signUpPassword.text.toString()
-            signupDatabase(signUpUsername, signUpPassword)
-        }
+        sbutton.setOnClickListener{
+            val unametext = uname.text.toString()
+            val pwordtext = pword.text.toString()
+            val cpwordtext = cpword.text.toString()
+            val savedata = db.insertUser(unametext, pwordtext)
 
-        binding.redirectLogin.setOnClickListener{
-            val intent = Intent(this, LoginActivity::class.java)
-            startActivity(intent)
-            finish()
-        }
+            if(TextUtils.isEmpty(unametext) || TextUtils.isEmpty(pwordtext) || TextUtils.isEmpty(cpwordtext))
+            {
+                Toast.makeText(this, "Please enter username and password!", Toast.LENGTH_SHORT).show()
+            }
+            else{
+                if(pwordtext == cpwordtext){
+                    if (savedata){
+                        Toast.makeText(this, "Signup Successful!", Toast.LENGTH_SHORT).show()
+                        val intent = Intent(this, LoginActivity::class.java)
+                        startActivity(intent)
+                    }
+                    else {
+                        Toast.makeText(this, "User Already Exist!", Toast.LENGTH_SHORT).show()
+                    }
+
+                }else{
+                    Toast.makeText(this, "Please match password!", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+    }
     }
 
-    private fun signupDatabase(username: String, password: String){
-        val insertedRowId = databaseHelper.insertUser(username, password)
-        if (insertedRowId != -1L){
-            Toast.makeText(this, "SignUp Successful", Toast.LENGTH_SHORT).show()
-            val intent = Intent(this, LoginActivity::class.java)
-            startActivity(intent)
-            finish()
-        }else {
-            Toast.makeText(this, "SignUp Failed", Toast.LENGTH_SHORT).show()
-        }
-    }
 }
