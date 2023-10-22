@@ -22,10 +22,6 @@ class SignUpActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_sign_up)
 
-        uname = findViewById(R.id.signUpUsername)
-        pword = findViewById(R.id.signUpPassword)
-        cpword = findViewById(R.id.signUpConfirmPassword)
-        sbutton = findViewById(R.id.signup_button)
         db = DatabaseHelper(this)
 
         binding= ActivitySignUpBinding.inflate(layoutInflater)
@@ -37,7 +33,11 @@ class SignUpActivity : AppCompatActivity() {
         }
 
 
-        sbutton.setOnClickListener{
+        binding.signupButton.setOnClickListener{
+            uname = findViewById(R.id.signUpUsername)
+            pword = findViewById(R.id.signUpPassword)
+            cpword = findViewById(R.id.signUpConfirmPassword)
+            sbutton = findViewById(R.id.signup_button)
             val unametext = uname.text.toString()
             val pwordtext = pword.text.toString()
             val cpwordtext = cpword.text.toString()

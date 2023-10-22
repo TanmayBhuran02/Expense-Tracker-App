@@ -23,10 +23,6 @@ class LoginActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_login)
 
-        euname = findViewById(R.id.login_username)
-        epword = findViewById(R.id.login_password)
-        esbutton = findViewById(R.id.login_button)
-        sredirect = findViewById(R.id.signupRedirect)
         db = DatabaseHelper(this)
 
         binding= ActivityLoginBinding.inflate(layoutInflater)
@@ -37,7 +33,12 @@ class LoginActivity : AppCompatActivity() {
             startActivity(intent)
         }
 
-        esbutton.setOnClickListener{
+        binding.loginButton.setOnClickListener{
+            euname = findViewById(R.id.login_username)
+            epword = findViewById(R.id.login_password)
+            esbutton = findViewById(R.id.login_button)
+            sredirect = findViewById(R.id.signupRedirect)
+
             val eunametext =euname.text.toString()
             val epwordtext =epword.text.toString()
 

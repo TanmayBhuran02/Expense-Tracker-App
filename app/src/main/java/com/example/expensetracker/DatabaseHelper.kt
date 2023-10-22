@@ -38,8 +38,9 @@ class DatabaseHelper(context: Context):
 
     fun checkuser(username: String, password: String):Boolean{
         val db = this.writableDatabase
-        val query = ("select * from data where username = $username and password = $password")
-        val cursor = db.rawQuery(query, null)
+        val query = "SELECT * FROM data WHERE username = ? AND password = ?"
+        val selectionArgs = arrayOf(username, password)
+        val cursor = readableDatabase.rawQuery(query, selectionArgs)
         if (cursor.count<= 0){
             cursor.close()
             return false
