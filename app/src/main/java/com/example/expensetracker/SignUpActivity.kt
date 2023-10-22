@@ -7,6 +7,7 @@ import android.text.TextUtils
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
+import com.example.expensetracker.databinding.ActivitySignUpBinding
 
 class SignUpActivity : AppCompatActivity() {
 
@@ -15,6 +16,7 @@ class SignUpActivity : AppCompatActivity() {
     private lateinit var cpword : EditText
     private lateinit var sbutton : Button
     private lateinit var db : DatabaseHelper
+    private lateinit var binding: ActivitySignUpBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -25,6 +27,15 @@ class SignUpActivity : AppCompatActivity() {
         cpword = findViewById(R.id.signUpConfirmPassword)
         sbutton = findViewById(R.id.signup_button)
         db = DatabaseHelper(this)
+
+        binding= ActivitySignUpBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        binding.redirectLogin.setOnClickListener{
+            val intent = Intent(this, LoginActivity::class.java)
+            startActivity(intent)
+        }
+
 
         sbutton.setOnClickListener{
             val unametext = uname.text.toString()

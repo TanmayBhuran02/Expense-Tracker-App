@@ -6,16 +6,18 @@ import android.os.Bundle
 import android.text.TextUtils
 import android.widget.Button
 import android.widget.EditText
+import android.widget.TextView
 import android.widget.Toast
-import org.w3c.dom.Text
+import com.example.expensetracker.databinding.ActivityLoginBinding
 
 class LoginActivity : AppCompatActivity() {
 
     private lateinit var euname : EditText
     private lateinit var epword : EditText
     private lateinit var esbutton : Button
-    private lateinit var sredirect : Text
+    private lateinit var sredirect : TextView
     private lateinit var db: DatabaseHelper
+    private lateinit var binding: ActivityLoginBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -26,6 +28,14 @@ class LoginActivity : AppCompatActivity() {
         esbutton = findViewById(R.id.login_button)
         sredirect = findViewById(R.id.signupRedirect)
         db = DatabaseHelper(this)
+
+        binding= ActivityLoginBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        binding.signupRedirect.setOnClickListener{
+            val intent = Intent(this, SignUpActivity::class.java)
+            startActivity(intent)
+        }
 
         esbutton.setOnClickListener{
             val eunametext =euname.text.toString()
