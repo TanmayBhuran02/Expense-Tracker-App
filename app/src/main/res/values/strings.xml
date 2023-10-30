@@ -7,4 +7,11 @@
     <string name="enter_password">enter password</string>
     <string name="password">Password</string>
     <string name="username">Username</string>
+    <string name="total_balance">Total Balance</string>
+    <string name="_20000">₹20000</string>
+    <string name="_50000">₹50000</string>
+    <string name="income">Income</string>
+    <string name="_30000">₹30000</string>
+    <string name="expense">Expense</string>
+    <string name="recent_transactions">Recent Transactions</string>
 </resources>
