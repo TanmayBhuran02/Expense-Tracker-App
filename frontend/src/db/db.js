@@ -27,13 +27,13 @@ export function generateUUID() {
 
 // ── CRUD helpers ───────────────────────────────────────────────────────────
 
-export async function addTransaction({ amount, type, category }) {
+export async function addTransaction({ amount, type, category, timestamp }) {
   return db.transactions.add({
     client_uuid:  generateUUID(),
     amount:       parseFloat(amount),
     type,
     category,
-    timestamp:    new Date().toISOString(),
+    timestamp:    timestamp || new Date().toISOString(),
     sync_status:  "pending",   // will be pushed on next sync
   });
 }

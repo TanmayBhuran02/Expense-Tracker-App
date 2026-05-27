@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import create_access_token
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from ..extensions import db
 from ..models.user import User
 
@@ -14,7 +14,7 @@ def register():
     user.set_password(data["password"])
     db.session.add(user)
     db.session.commit()
-    token = create_access_token(identity=user.id)
+    token = create_access_token(identity=str(user.id))
     return jsonify({"access_token": token}), 201
 
 @auth_bp.route("/login", methods=["POST"])
@@ -25,3 +25,15 @@ def login():
         return jsonify({"error": "Invalid credentials"}), 401
     token = create_access_token(identity=str(user.id))
     return jsonify({"access_token": token}), 200
+
+@auth_bp.route("/refresh", methods=["POST"])
+@jwt_required()
+def refresh():
+    """
+    Accepts a valid (non-expired) access token and returns a fresh one.
+    The frontend calls this when a request returns 401 to attempt
+    a transparent re-authentication before redirecting to login.
+    """
+    current_user_id = get_jwt_identity()
+    new_token = create_access_token(identity=current_user_id)
+    return jsonify({"access_token": new_token}), 200
