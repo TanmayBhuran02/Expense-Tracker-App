@@ -7,16 +7,23 @@ import { useState, useEffect, useCallback } from "react";
 
 // Global toast state — shared via event emitter pattern
 let toastListeners = [];
+let toastDismissListeners = [];
 
 export function showToast(message, type = "info", duration = 4000) {
-  toastListeners.forEach((fn) => fn({ message, type, duration, id: Date.now() }));
+  const id = Math.random().toString(36).substring(2, 9);
+  toastListeners.forEach((fn) => fn({ message, type, duration, id }));
+  return id;
+}
+
+export function dismissToast(id) {
+  toastDismissListeners.forEach((fn) => fn(id));
 }
 
 export function useToast() {
   const [toasts, setToasts] = useState([]);
 
   useEffect(() => {
-    const handler = (toast) => {
+    const handleAdd = (toast) => {
       setToasts((prev) => [...prev, toast]);
       if (toast.duration > 0) {
         setTimeout(() => {
@@ -24,9 +31,17 @@ export function useToast() {
         }, toast.duration);
       }
     };
-    toastListeners.push(handler);
+
+    const handleDismiss = (id) => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    };
+
+    toastListeners.push(handleAdd);
+    toastDismissListeners.push(handleDismiss);
+
     return () => {
-      toastListeners = toastListeners.filter((fn) => fn !== handler);
+      toastListeners = toastListeners.filter((fn) => fn !== handleAdd);
+      toastDismissListeners = toastDismissListeners.filter((fn) => fn !== handleDismiss);
     };
   }, []);
 
@@ -48,6 +63,8 @@ export default function ToastContainer() {
         <div
           key={toast.id}
           onClick={() => dismiss(toast.id)}
+          role="alert"
+          aria-live="assertive"
           className={`px-4 py-3 rounded-lg shadow-lg cursor-pointer text-sm font-medium transition-all duration-300 animate-slide-down
             ${toast.type === "success" ? "bg-emerald-600 text-white" : ""}
             ${toast.type === "error" ? "bg-red-600 text-white" : ""}

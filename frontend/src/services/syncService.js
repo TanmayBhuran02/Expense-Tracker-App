@@ -25,33 +25,50 @@ import {
  * @returns {{ pushed: number, pulled: number }} sync summary
  */
 export async function runSync() {
-  const pending        = await getPendingTransactions();
-  const lastSyncTs     = await getLastSyncTimestamp();
+  try {
+    const pending    = await getPendingTransactions();
+    const lastSyncTs = await getLastSyncTimestamp();
 
-  const payload = {
-    last_sync_timestamp: lastSyncTs,
-    transactions: pending.map(({ client_uuid, amount, type, category, timestamp }) => ({
-      client_uuid, amount, type, category, timestamp,
-    })),
-  };
+    const payload = {
+      last_sync_timestamp: lastSyncTs,
+      transactions: pending.map(({ client_uuid, amount, type, category, timestamp, deleted }) => ({
+        client_uuid,
+        amount: parseFloat(amount),
+        type,
+        category,
+        timestamp,
+        deleted: !!deleted,
+      })),
+    };
 
-  const { data } = await api.post("/api/sync", payload);
+    let response;
+    try {
+      response = await api.post("/api/sync", payload);
+    } catch (err) {
+      const serverMsg = err.response?.data?.error || err.message;
+      throw new Error(`Server sync failed: ${serverMsg}`);
+    }
 
-  // Mark locally-pushed records as synced
-  if (pending.length > 0) {
-    await markSynced(pending.map((t) => t.client_uuid));
+    const { data } = response;
+
+    // Mark locally-pushed records as synced
+    if (pending.length > 0) {
+      await markSynced(pending.map((t) => t.client_uuid));
+    }
+
+    // Upsert records the server sent back (new from other devices, etc.)
+    if (data.server_transactions?.length > 0) {
+      await upsertFromServer(data.server_transactions);
+    }
+
+    // Advance the sync cursor so next pull only fetches newer records
+    await setLastSyncTimestamp(data.server_timestamp);
+
+    return {
+      pushed: pending.length,
+      pulled: data.server_transactions?.length ?? 0,
+    };
+  } catch (err) {
+    throw new Error(`Sync failed: ${err.message}`);
   }
-
-  // Upsert records the server sent back (new from other devices, etc.)
-  if (data.server_transactions?.length > 0) {
-    await upsertFromServer(data.server_transactions);
-  }
-
-  // Advance the sync cursor so next pull only fetches newer records
-  await setLastSyncTimestamp(data.server_timestamp);
-
-  return {
-    pushed: pending.length,
-    pulled: data.server_transactions?.length ?? 0,
-  };
 }

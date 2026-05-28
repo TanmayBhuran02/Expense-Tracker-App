@@ -14,11 +14,19 @@ class Transaction(db.Model):
     updated_at  = db.Column(db.DateTime(timezone=True), server_default=db.func.now(),
                             onupdate=db.func.now())
 
+    deleted_at  = db.Column(db.DateTime(timezone=True), nullable=True)
+    
+    # Future-Scope Hooks:
+    plaid_transaction_id = db.Column(db.String(255), nullable=True)
+    budget_id = db.Column(db.Integer, nullable=True)
+    # // OCR_HOOK receipt_image_url column and Celery task dispatch would be added here
+
     __table_args__ = (
         db.UniqueConstraint("user_id", "client_uuid", name="uq_user_client_uuid"),
     )
 
     def to_dict(self):
+        """Convert the transaction model to a dictionary representation."""
         return {
             "client_uuid": str(self.client_uuid),
             "amount":      float(self.amount),
@@ -26,4 +34,5 @@ class Transaction(db.Model):
             "category":    self.category,
             "timestamp":   self.timestamp.isoformat(),
             "updated_at":  self.updated_at.isoformat(),
+            "deleted":     self.deleted_at is not None,
         }

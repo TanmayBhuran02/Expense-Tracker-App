@@ -5,6 +5,16 @@ const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5000";
 export const api = axios.create({ baseURL: BASE_URL });
 
 // ── Request interceptor: attach JWT ─────────────────────────────────────────
+// SECURITY NOTE: JWT is stored in localStorage.
+// XSS vs CSRF Trade-off:
+// - Storing token in localStorage makes it susceptible to XSS (cross-site scripting) attacks
+//   if an attacker is able to run arbitrary JS in the application context.
+// - Alternatively, storing the token in a secure, httpOnly cookie protects it from XSS
+//   but makes the application vulnerable to CSRF (cross-site request forgery) attacks,
+//   which would require CSRF tokens / SameSite configuration.
+// - Since this is an offline-first app relying on standard client-side API requests,
+//   localStorage is chosen for simplicity and local client persistence, under the assumption
+//   that strong Content Security Policy (CSP) and input sanitization protect against XSS.
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("access_token");
   if (token) config.headers.Authorization = `Bearer ${token}`;

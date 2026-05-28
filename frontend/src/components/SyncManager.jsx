@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { isAuthenticated } from "../services/api";
 import { runSync } from "../services/syncService";
-import { showToast } from "./Toast";
+import { showToast, dismissToast } from "./Toast";
 
 /**
  * SyncManager — top-level component that manages automatic sync lifecycle.
@@ -22,12 +22,14 @@ export default function SyncManager({ children }) {
     if (!isAuthenticated() || syncInFlightRef.current) return;
 
     syncInFlightRef.current = true;
-    showToast("Syncing…", "info", 0); // persistent until replaced
+    const toastId = showToast("Syncing…", "info", 0); // persistent until dismissed
 
     try {
       const result = await runSync();
+      dismissToast(toastId);
       showToast(`Synced ✓ — pushed ${result.pushed}, pulled ${result.pulled}`, "success");
     } catch (err) {
+      dismissToast(toastId);
       const msg = err.response?.status === 401
         ? "Session expired — please log in again"
         : `Sync failed: ${err.message}`;

@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import SyncManager from "./components/SyncManager";
@@ -7,6 +8,10 @@ import PrivateRoute from "./components/PrivateRoute";
 import { isAuthenticated } from "./services/api";
 
 function App() {
+  useEffect(() => {
+    document.documentElement.classList.add("dark");
+  }, []);
+
   return (
     <Router>
       <SyncManager>

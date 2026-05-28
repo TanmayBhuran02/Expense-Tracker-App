@@ -1,9 +1,10 @@
-import { useState } from "react";
-import { addTransaction } from "../db/db";
+import { useState, useEffect } from "react";
+import { addTransaction, addCustomCategory, getCustomCategories } from "../db/db";
 import { runSync } from "../services/syncService";
 import { isAuthenticated } from "../services/api";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { showToast } from "./Toast";
+import { logger } from "../utils/logger";
 
 const CATEGORY_MAP = {
   food: "🍔",
@@ -29,12 +30,25 @@ export default function TransactionModal({ isOpen, onClose }) {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Custom category fields
+  const [customCategories, setCustomCategories] = useState([]);
+  const [newCustomCategoryName, setNewCustomCategoryName] = useState("");
+  const [showAddCustomInput, setShowAddCustomInput] = useState(false);
+
+  // Fetch custom categories from Dexie when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      getCustomCategories()
+        .then((cats) => setCustomCategories(cats))
+        .catch((err) => logger.error("Failed to load custom categories:", err));
+    }
+  }, [isOpen]);
+
   const validate = () => {
     const num = parseFloat(amount);
     if (!amount || isNaN(num) || num <= 0) {
       return "Amount must be greater than 0";
     }
-    // Max 10 digits before decimal
     const intPart = Math.floor(num).toString();
     if (intPart.length > 10) {
       return "Amount is too large (max 10 digits)";
@@ -43,6 +57,43 @@ export default function TransactionModal({ isOpen, onClose }) {
       return "Please select a date";
     }
     return "";
+  };
+
+  const handleCategoryChange = (e) => {
+    const val = e.target.value;
+    if (val === "add_custom") {
+      setShowAddCustomInput(true);
+    } else {
+      setCategory(val);
+      setShowAddCustomInput(false);
+    }
+  };
+
+  const handleSaveCustomCategory = async () => {
+    const name = newCustomCategoryName.trim().toLowerCase();
+    if (!name) return;
+    
+    // Check if duplicate
+    const isDuplicate = 
+      CATEGORY_MAP[name] !== undefined || 
+      customCategories.some((cat) => cat.name === name);
+      
+    if (isDuplicate) {
+      showToast(`Category "${name}" already exists`, "error");
+      return;
+    }
+
+    try {
+      await addCustomCategory(name);
+      const updated = await getCustomCategories();
+      setCustomCategories(updated);
+      setCategory(name);
+      setNewCustomCategoryName("");
+      setShowAddCustomInput(false);
+      showToast(`Added custom category: ${name}`, "success");
+    } catch (err) {
+      showToast(`Failed to add category: ${err.message}`, "error");
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -56,7 +107,6 @@ export default function TransactionModal({ isOpen, onClose }) {
     setIsSubmitting(true);
 
     try {
-      // Round to 2 decimal places
       const roundedAmount = Math.round(parseFloat(amount) * 100) / 100;
       const parsedDate = new Date(date);
       if (isNaN(parsedDate.getTime())) {
@@ -86,7 +136,7 @@ export default function TransactionModal({ isOpen, onClose }) {
         });
       }
     } catch (err) {
-      console.error("Transaction save error:", err);
+      logger.error("Transaction save error:", err);
       setError(`Failed to save: ${err.message || err}`);
     } finally {
       setIsSubmitting(false);
@@ -103,106 +153,157 @@ export default function TransactionModal({ isOpen, onClose }) {
         onClick={onClose}
       />
 
-      {/* Modal */}
-      <div className="fixed inset-x-0 bottom-0 md:inset-0 md:flex md:items-center md:justify-center z-50">
-        <div className="bg-slate-800 rounded-t-2xl md:rounded-2xl shadow-2xl w-full max-w-lg p-6 animate-slide-up">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold">Add Transaction</h2>
-            <button
-              onClick={onClose}
-              className="text-slate-400 hover:text-white text-2xl leading-none"
-            >
-              ×
-            </button>
+      {/* Responsive bottom-sheet (mobile) / modal container (desktop) */}
+      <div
+        className="fixed bottom-0 left-0 right-0 w-full bg-slate-800 rounded-t-2xl shadow-2xl p-6 z-50 animate-slide-up
+                   md:absolute md:top-1/2 md:left-1/2 md:bottom-auto md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl md:max-w-lg md:w-full"
+      >
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-bold">Add Transaction</h2>
+          <button
+            onClick={onClose}
+            aria-label="Close modal"
+            className="text-slate-400 hover:text-white text-2xl leading-none"
+          >
+            ×
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {/* Amount (Tab Index 1) */}
+          <div>
+            <label htmlFor="amount-input" className="text-sm text-slate-400 mb-1 block">Amount</label>
+            <input
+              id="amount-input"
+              type="number"
+              step="0.01"
+              min="0.01"
+              placeholder="0.00"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="w-full p-3 rounded-lg bg-slate-700 text-white text-lg font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              tabIndex={1}
+              autoFocus
+            />
           </div>
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            {/* Amount */}
-            <div>
-              <label className="text-sm text-slate-400 mb-1 block">Amount</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                placeholder="0.00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="w-full p-3 rounded-lg bg-slate-700 text-white text-lg font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                autoFocus
-              />
+          {/* Type Toggle (Tab Index 2) */}
+          <div>
+            <span className="text-sm text-slate-400 mb-1 block">Type</span>
+            <div className="flex bg-slate-700 rounded-lg p-1">
+              <button
+                type="button"
+                onClick={() => setType("expense")}
+                tabIndex={2}
+                className={`flex-1 py-2 rounded-md text-sm font-bold transition-all ${
+                  type === "expense"
+                    ? "bg-red-600 text-white shadow"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                Expense
+              </button>
+              <button
+                type="button"
+                onClick={() => setType("income")}
+                tabIndex={2}
+                className={`flex-1 py-2 rounded-md text-sm font-bold transition-all ${
+                  type === "income"
+                    ? "bg-emerald-600 text-white shadow"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                Income
+              </button>
             </div>
+          </div>
 
-            {/* Type Toggle (pill) */}
-            <div>
-              <label className="text-sm text-slate-400 mb-1 block">Type</label>
-              <div className="flex bg-slate-700 rounded-lg p-1">
+          {/* Category Dropdown (Tab Index 3) */}
+          <div>
+            <label htmlFor="category-select" className="text-sm text-slate-400 mb-1 block">Category</label>
+            <select
+              id="category-select"
+              value={showAddCustomInput ? "add_custom" : category}
+              onChange={handleCategoryChange}
+              tabIndex={3}
+              className="w-full p-3 rounded-lg bg-slate-700 text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            >
+              {/* Hardcoded system categories */}
+              {Object.entries(CATEGORY_MAP).map(([key, emoji]) => (
+                <option key={key} value={key}>
+                  {emoji} {key.charAt(0).toUpperCase() + key.slice(1)}
+                </option>
+              ))}
+              
+              {/* Custom categories loaded from Dexie */}
+              {customCategories.map((cat) => (
+                <option key={cat.id} value={cat.name}>
+                  📦 {cat.name.charAt(0).toUpperCase() + cat.name.slice(1)}
+                </option>
+              ))}
+              
+              {/* Option to trigger custom category creation */}
+              <option value="add_custom" className="text-blue-400 font-semibold">
+                ➕ Add Custom Category...
+              </option>
+            </select>
+
+            {/* Input field for adding a custom category */}
+            {showAddCustomInput && (
+              <div className="mt-3 flex gap-2 animate-slide-down">
+                <input
+                  type="text"
+                  placeholder="New category name"
+                  value={newCustomCategoryName}
+                  onChange={(e) => setNewCustomCategoryName(e.target.value)}
+                  className="flex-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm focus:outline-none focus:border-blue-500"
+                />
                 <button
                   type="button"
-                  onClick={() => setType("expense")}
-                  className={`flex-1 py-2 rounded-md text-sm font-bold transition-all ${
-                    type === "expense"
-                      ? "bg-red-600 text-white shadow"
-                      : "text-slate-400 hover:text-white"
-                  }`}
+                  onClick={handleSaveCustomCategory}
+                  className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-bold text-white transition-colors"
                 >
-                  Expense
+                  Save
                 </button>
                 <button
                   type="button"
-                  onClick={() => setType("income")}
-                  className={`flex-1 py-2 rounded-md text-sm font-bold transition-all ${
-                    type === "income"
-                      ? "bg-emerald-600 text-white shadow"
-                      : "text-slate-400 hover:text-white"
-                  }`}
+                  onClick={() => setShowAddCustomInput(false)}
+                  className="bg-slate-600 hover:bg-slate-500 px-3 py-2 rounded-lg text-sm text-white transition-colors"
                 >
-                  Income
+                  Cancel
                 </button>
               </div>
-            </div>
-
-            {/* Category Dropdown */}
-            <div>
-              <label className="text-sm text-slate-400 mb-1 block">Category</label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full p-3 rounded-lg bg-slate-700 text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              >
-                {Object.entries(CATEGORY_MAP).map(([key, emoji]) => (
-                  <option key={key} value={key}>
-                    {emoji} {key.charAt(0).toUpperCase() + key.slice(1)}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Date */}
-            <div>
-              <label className="text-sm text-slate-400 mb-1 block">Date</label>
-              <input
-                type="datetime-local"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full p-3 rounded-lg bg-slate-700 text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-            </div>
-
-            {/* Validation Error */}
-            {error && (
-              <p className="text-red-400 text-sm">{error}</p>
             )}
+          </div>
 
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full py-3 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {isSubmitting ? "Saving…" : "Add Transaction"}
-            </button>
-          </form>
-        </div>
+          {/* Date (Tab Index 4) */}
+          <div>
+            <label htmlFor="date-input" className="text-sm text-slate-400 mb-1 block">Date</label>
+            <input
+              id="date-input"
+              type="datetime-local"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              tabIndex={4}
+              className="w-full p-3 rounded-lg bg-slate-700 text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            />
+          </div>
+
+          {/* Validation Error */}
+          {error && (
+            <p className="text-red-400 text-sm" role="alert">{error}</p>
+          )}
+
+          {/* Submit (Tab Index 5) */}
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            tabIndex={5}
+            className="w-full py-3 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isSubmitting ? "Saving…" : "Add Transaction"}
+          </button>
+        </form>
       </div>
     </>
   );
