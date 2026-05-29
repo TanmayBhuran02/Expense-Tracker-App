@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
-import { addTransaction, addCustomCategory, getCustomCategories } from "../db/db";
+import { useState, useEffect, useCallback } from "react";
+import { db, addTransaction, addCustomCategory, getCustomCategories, addSplit } from "../db/db";
 import { runSync } from "../services/syncService";
 import { isAuthenticated } from "../services/api";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { showToast } from "./Toast";
 import { logger } from "../utils/logger";
+import SplitForm from "./SplitForm";
 
 const CATEGORY_MAP = {
   food: "🍔",
@@ -20,8 +21,13 @@ export { CATEGORY_MAP };
 /**
  * TransactionModal — slide-up bottom sheet (mobile) / centered modal (desktop).
  * Validates input, writes to IndexedDB instantly, and fires sync if online.
+ *
+ * Props:
+ *   isOpen       — boolean controlling visibility
+ *   onClose      — callback to close the modal
+ *   editData     — optional object for editing (may contain recurringRuleId)
  */
-export default function TransactionModal({ isOpen, onClose }) {
+export default function TransactionModal({ isOpen, onClose, editData }) {
   const isOnline = useOnlineStatus();
   const [amount, setAmount] = useState("");
   const [type, setType] = useState("expense");
@@ -35,6 +41,13 @@ export default function TransactionModal({ isOpen, onClose }) {
   const [newCustomCategoryName, setNewCustomCategoryName] = useState("");
   const [showAddCustomInput, setShowAddCustomInput] = useState(false);
 
+  // Split expense state
+  const [splitEnabled, setSplitEnabled] = useState(false);
+  const [splitData, setSplitData] = useState(null);
+
+  // Detect if this is a recurring-generated transaction
+  const isRecurring = editData?.recurringRuleId;
+
   // Fetch custom categories from Dexie when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -43,6 +56,16 @@ export default function TransactionModal({ isOpen, onClose }) {
         .catch((err) => logger.error("Failed to load custom categories:", err));
     }
   }, [isOpen]);
+
+  // Populate form when editData is provided
+  useEffect(() => {
+    if (editData) {
+      setAmount(editData.amount?.toString() || "");
+      setType(editData.type || "expense");
+      setCategory(editData.category || "food");
+      setDate(editData.timestamp ? new Date(editData.timestamp).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16));
+    }
+  }, [editData]);
 
   const validate = () => {
     const num = parseFloat(amount);
@@ -55,6 +78,9 @@ export default function TransactionModal({ isOpen, onClose }) {
     }
     if (!date) {
       return "Please select a date";
+    }
+    if (splitEnabled && !splitData) {
+      return "Please complete the split details (all names required, shares must equal total)";
     }
     return "";
   };
@@ -96,6 +122,10 @@ export default function TransactionModal({ isOpen, onClose }) {
     }
   };
 
+  const handleSplitDataChange = useCallback((data) => {
+    setSplitData(data);
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const validationError = validate();
@@ -115,18 +145,35 @@ export default function TransactionModal({ isOpen, onClose }) {
         return;
       }
 
-      await addTransaction({
+      const txnId = await addTransaction({
         amount: roundedAmount,
         type,
         category,
         timestamp: parsedDate.toISOString(),
+        recurringRuleId: editData?.recurringRuleId || null,
       });
+
+      // If split is enabled and valid, save split data
+      if (splitEnabled && splitData) {
+        // We need the client_uuid of the transaction we just created
+        const txn = await db.transactions.get(txnId);
+        if (txn) {
+          await addSplit({
+            transactionClientUuid: txn.client_uuid,
+            title: splitData.title,
+            totalAmount: splitData.totalAmount,
+            members: splitData.members,
+          });
+        }
+      }
 
       // Reset form
       setAmount("");
       setType("expense");
       setCategory("food");
       setDate(new Date().toISOString().slice(0, 16));
+      setSplitEnabled(false);
+      setSplitData(null);
       onClose();
 
       // Fire-and-forget sync if online
@@ -155,11 +202,18 @@ export default function TransactionModal({ isOpen, onClose }) {
 
       {/* Responsive bottom-sheet (mobile) / modal container (desktop) */}
       <div
-        className="fixed bottom-0 left-0 right-0 w-full bg-slate-800 rounded-t-2xl shadow-2xl p-6 z-50 animate-slide-up
+        className="fixed bottom-0 left-0 right-0 w-full bg-slate-800 rounded-t-2xl shadow-2xl p-6 z-50 animate-slide-up max-h-[90vh] overflow-y-auto
                    md:absolute md:top-1/2 md:left-1/2 md:bottom-auto md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl md:max-w-lg md:w-full"
       >
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold">Add Transaction</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-bold">Add Transaction</h2>
+            {isRecurring && (
+              <span className="inline-flex items-center gap-1 bg-purple-500/20 text-purple-400 text-xs font-bold px-2 py-1 rounded-full">
+                ↻ Recurring
+              </span>
+            )}
+          </div>
           <button
             onClick={onClose}
             aria-label="Close modal"
@@ -288,6 +342,16 @@ export default function TransactionModal({ isOpen, onClose }) {
               className="w-full p-3 rounded-lg bg-slate-700 text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
             />
           </div>
+
+          {/* Split Form */}
+          {type === "expense" && parseFloat(amount) > 0 && (
+            <SplitForm
+              totalAmount={amount}
+              onSplitDataChange={handleSplitDataChange}
+              enabled={splitEnabled}
+              onToggle={() => setSplitEnabled((prev) => !prev)}
+            />
+          )}
 
           {/* Validation Error */}
           {error && (

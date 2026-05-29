@@ -16,6 +16,9 @@ class Transaction(db.Model):
 
     deleted_at  = db.Column(db.DateTime(timezone=True), nullable=True)
     
+    recurring_rule_id = db.Column(db.UUID(as_uuid=True),
+                                   db.ForeignKey("recurring_rules.id"), nullable=True)
+
     # Future-Scope Hooks:
     plaid_transaction_id = db.Column(db.String(255), nullable=True)
     budget_id = db.Column(db.Integer, nullable=True)
@@ -28,11 +31,12 @@ class Transaction(db.Model):
     def to_dict(self):
         """Convert the transaction model to a dictionary representation."""
         return {
-            "client_uuid": str(self.client_uuid),
-            "amount":      float(self.amount),
-            "type":        self.type,
-            "category":    self.category,
-            "timestamp":   self.timestamp.isoformat(),
-            "updated_at":  self.updated_at.isoformat(),
-            "deleted":     self.deleted_at is not None,
+            "client_uuid":       str(self.client_uuid),
+            "amount":            float(self.amount),
+            "type":              self.type,
+            "category":          self.category,
+            "timestamp":         self.timestamp.isoformat(),
+            "updated_at":        self.updated_at.isoformat(),
+            "deleted":           self.deleted_at is not None,
+            "recurring_rule_id": str(self.recurring_rule_id) if self.recurring_rule_id else None,
         }

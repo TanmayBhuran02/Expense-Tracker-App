@@ -101,3 +101,44 @@ export function logout() {
 export function isAuthenticated() {
   return !!localStorage.getItem("access_token");
 }
+
+// ── Recurring Rules API ────────────────────────────────────────────────────
+
+export async function getRecurringRules() {
+  const { data } = await api.get("/api/recurring-rules/");
+  return data;
+}
+
+export async function createRecurringRule(ruleData) {
+  const { data } = await api.post("/api/recurring-rules/", ruleData);
+  return data;
+}
+
+export async function updateRecurringRule(id, updates) {
+  const { data } = await api.patch(`/api/recurring-rules/${id}`, updates);
+  return data;
+}
+
+export async function deleteRecurringRule(id) {
+  const { data } = await api.delete(`/api/recurring-rules/${id}`);
+  return data;
+}
+
+// ── Splits API ─────────────────────────────────────────────────────────────
+
+export async function getSplits() {
+  const { data } = await api.get("/api/splits/");
+  return data;
+}
+
+export async function createSplit(splitData) {
+  const { data } = await api.post("/api/splits/", splitData);
+  return data;
+}
+
+export async function settleSplitMember(splitId, memberId) {
+  const { data } = await api.patch(`/api/splits/${splitId}/members/${memberId}`, {
+    is_settled: true,
+  });
+  return data;
+}
