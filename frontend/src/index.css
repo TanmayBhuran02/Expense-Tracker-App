@@ -31,3 +31,36 @@
 .animate-slide-up {
   animation: slide-up 0.3s ease-out;
 }
+
+/* App shell styling for a native mobile feel */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+  min-height: 100dvh;
+}
+
+/* Allow selection inside inputs and textareas */
+input, textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Sleek custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.3);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.5);
+}
+

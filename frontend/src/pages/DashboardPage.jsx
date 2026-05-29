@@ -100,6 +100,31 @@ export default function DashboardPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState("transactions"); // "transactions" | "recurring"
 
+  // PWA Install prompt state
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      logger.info("beforeinstallprompt event captured");
+    };
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    logger.info(`User installation response: ${outcome}`);
+    if (outcome === "accepted") {
+      setDeferredPrompt(null);
+    }
+  };
+
   // Recurring rules state
   const [recurringRules, setRecurringRules] = useState([]);
   const recurringProcessedRef = useRef(false);
@@ -556,6 +581,34 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
+
+      {/* PWA Install Banner */}
+      {deferredPrompt && (
+        <div className="mb-6 p-4 rounded-xl bg-blue-950/40 border border-blue-800/40 flex flex-col sm:flex-row justify-between items-center gap-3 animate-slide-down">
+          <div className="text-left">
+            <h3 className="font-bold text-blue-400 text-sm flex items-center gap-2">
+              <span>📲</span> Install Expense Tracker
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Add to your home screen for quick full-screen access and smooth offline tracking.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <button
+              onClick={handleInstallApp}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors shadow-md focus:ring-2 focus:ring-blue-500"
+            >
+              Install App
+            </button>
+            <button
+              onClick={() => setDeferredPrompt(null)}
+              className="text-xs text-slate-400 hover:text-white transition-colors px-2 py-2"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
