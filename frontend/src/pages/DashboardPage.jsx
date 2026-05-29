@@ -546,9 +546,9 @@ export default function DashboardPage() {
             <span>{syncBadge.label}</span>
           </div>
           <button
-            onClick={() => {
-              logout();
-              window.location.reload();
+            onClick={async () => {
+              await logout();
+              window.location.href = "/login";
             }}
             className="text-sm text-slate-400 hover:text-white underline focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-1"
           >

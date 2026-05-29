@@ -1,23 +1,64 @@
 import axios from "axios";
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5000";
+// ── Global Diagnostic Logs (For debugging connection/CORS issues) ────────────
+window.__diagnosticLogs = window.__diagnosticLogs || [];
+export function logDiagnostic(type, msg, data) {
+  const timestamp = new Date().toLocaleTimeString();
+  const entry = `[${timestamp}] [${type}] ${msg} ${data ? JSON.stringify(data) : ""}`;
+  window.__diagnosticLogs.push(entry);
+  if (window.__onDiagnosticLog) {
+    try {
+      window.__onDiagnosticLog(entry);
+    } catch (e) {
+      // ignore
+    }
+  }
+  if (type === "ERROR") {
+    console.error(entry);
+  } else {
+    console.log(entry);
+  }
+}
 
-export const api = axios.create({ baseURL: BASE_URL });
+const BASE_URL = import.meta.env.VITE_API_URL ?? `${window.location.protocol}//${window.location.hostname}:5000`;
 
-// ── Request interceptor: attach JWT ─────────────────────────────────────────
-// SECURITY NOTE: JWT is stored in localStorage.
-// XSS vs CSRF Trade-off:
-// - Storing token in localStorage makes it susceptible to XSS (cross-site scripting) attacks
-//   if an attacker is able to run arbitrary JS in the application context.
-// - Alternatively, storing the token in a secure, httpOnly cookie protects it from XSS
-//   but makes the application vulnerable to CSRF (cross-site request forgery) attacks,
-//   which would require CSRF tokens / SameSite configuration.
-// - Since this is an offline-first app relying on standard client-side API requests,
-//   localStorage is chosen for simplicity and local client persistence, under the assumption
-//   that strong Content Security Policy (CSP) and input sanitization protect against XSS.
+logDiagnostic("INFO", "Initialized API service", {
+  BASE_URL,
+  windowLocation: window.location.href,
+  navigatorOnline: navigator.onLine,
+});
+
+export const api = axios.create({
+  baseURL: BASE_URL,
+  withCredentials: true, // Send/receive httpOnly cookies automatically
+});
+
+// ── CSRF Token Handling ─────────────────────────────────────────────────────
+// Flask-JWT-Extended sets a readable csrf_access_token cookie.
+// We read it and attach it as X-CSRF-TOKEN header on mutating requests.
+
+function getCsrfToken() {
+  const match = document.cookie.match(/(?:^|;\s*)csrf_access_token=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+// ── Request interceptor: attach CSRF token ──────────────────────────────────
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("access_token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  const method = (config.method || "get").toUpperCase();
+  const url = `${config.baseURL || ""}${config.url}`;
+  logDiagnostic("REQUEST", `${method} ${url}`, {
+    headers: { ...config.headers },
+    data: config.data,
+  });
+
+  // Only mutating methods need CSRF protection
+  const lowerMethod = (config.method || "get").toLowerCase();
+  if (["post", "put", "patch", "delete"].includes(lowerMethod)) {
+    const csrfToken = getCsrfToken();
+    if (csrfToken) {
+      config.headers["X-CSRF-TOKEN"] = csrfToken;
+    }
+  }
   return config;
 });
 
@@ -25,25 +66,33 @@ api.interceptors.request.use((config) => {
 let refreshPromise = null;
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const method = response.config.method?.toUpperCase();
+    const url = response.config.url;
+    logDiagnostic("RESPONSE", `SUCCESS ${method} ${url}`, {
+      status: response.status,
+      data: response.data,
+    });
+    return response;
+  },
   async (error) => {
+    const method = error.config?.method?.toUpperCase();
+    const url = error.config?.url;
+    logDiagnostic("ERROR", `FAILED ${method} ${url}`, {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      message: error.message,
+      code: error.code,
+    });
+
     const originalRequest = error.config;
 
     // Only attempt refresh for 401 errors, and only once per request
     if (error.response?.status === 401 && !originalRequest._retry) {
-      const token = localStorage.getItem("access_token");
-
-      // No token at all — skip refresh, go straight to login
-      if (!token) {
-        logout();
-        window.location.href = "/login";
-        return Promise.reject(error);
-      }
-
-      // Don't retry refresh calls themselves
-      if (originalRequest.url?.includes("/api/auth/refresh")) {
-        logout();
-        window.location.href = "/login";
+      // Don't retry refresh/logout/login/register calls themselves
+      const skipPaths = ["/api/auth/refresh", "/api/auth/logout", "/api/auth/login", "/api/auth/register", "/api/auth/me"];
+      if (skipPaths.some((p) => originalRequest.url?.includes(p))) {
         return Promise.reject(error);
       }
 
@@ -51,14 +100,19 @@ api.interceptors.response.use(
 
       // Use singleton promise so concurrent 401s share one refresh call
       if (!refreshPromise) {
+        logDiagnostic("INFO", "Initiating token refresh...");
         refreshPromise = api
           .post("/api/auth/refresh")
-          .then(({ data }) => {
-            localStorage.setItem("access_token", data.access_token);
-            return data.access_token;
+          .then(() => {
+            logDiagnostic("INFO", "Token refresh successful");
+            return true;
           })
           .catch((err) => {
-            logout();
+            logDiagnostic("ERROR", "Token refresh failed. Redirecting to login.", {
+              message: err.message,
+            });
+            // Refresh failed — session is truly expired
+            clearAuthFlag();
             window.location.href = "/login";
             throw err;
           })
@@ -68,8 +122,8 @@ api.interceptors.response.use(
       }
 
       try {
-        const newToken = await refreshPromise;
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        await refreshPromise;
+        // Retry the original request — the new cookie is already set
         return api(originalRequest);
       } catch (refreshErr) {
         return Promise.reject(refreshErr);
@@ -82,24 +136,63 @@ api.interceptors.response.use(
 
 // ── Auth helpers ────────────────────────────────────────────────────────────
 
+// Lightweight UI flag — NOT security-critical.
+// The real auth check is the httpOnly cookie validated server-side.
+const AUTH_FLAG_KEY = "is_logged_in";
+
+function setAuthFlag() {
+  localStorage.setItem(AUTH_FLAG_KEY, "true");
+}
+
+function clearAuthFlag() {
+  localStorage.removeItem(AUTH_FLAG_KEY);
+}
+
 export async function login(email, password) {
   const { data } = await api.post("/api/auth/login", { email, password });
-  localStorage.setItem("access_token", data.access_token);
+  setAuthFlag();
   return data;
 }
 
 export async function register(email, password) {
   const { data } = await api.post("/api/auth/register", { email, password });
-  localStorage.setItem("access_token", data.access_token);
+  setAuthFlag();
   return data;
 }
 
-export function logout() {
-  localStorage.removeItem("access_token");
+export async function logout() {
+  try {
+    await api.post("/api/auth/logout");
+  } catch {
+    // Even if the server is unreachable, clear local state
+  }
+  clearAuthFlag();
 }
 
+/**
+ * Lightweight synchronous check for UI routing decisions.
+ * Returns true if the user has previously authenticated in this browser.
+ * Does NOT guarantee the cookie is still valid — use checkAuthStatus() for that.
+ */
 export function isAuthenticated() {
-  return !!localStorage.getItem("access_token");
+  return localStorage.getItem(AUTH_FLAG_KEY) === "true";
+}
+
+/**
+ * Server-side auth status check. Validates the httpOnly cookie with the server.
+ * Use on app startup to reconcile the local flag with server reality.
+ *
+ * @returns {{ authenticated: boolean, user_id: number } | null}
+ */
+export async function checkAuthStatus() {
+  try {
+    const { data } = await api.get("/api/auth/me");
+    setAuthFlag();
+    return data;
+  } catch {
+    clearAuthFlag();
+    return null;
+  }
 }
 
 // ── Recurring Rules API ────────────────────────────────────────────────────
